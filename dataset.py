@@ -5,7 +5,8 @@ CSV format (produced by generate_data.py):
     flip_0, flip_1, ..., flip_{window-1}, label
 
 Excel format (user-supplied test file):
-    Any sheet with at least one column containing only 0s and 1s.
+    Any sheet with at least one column containing only 0s/1s or "h"/"t" strings.
+    "h" (heads) is mapped to 1, "t" (tails) to 0.
     The dataset builds sliding windows from that column automatically.
 """
 
@@ -64,13 +65,18 @@ class CoinFlipDataset(Dataset):
     # ------------------------------------------------------------------
 
     def _detect_flip_column(self, df: pd.DataFrame) -> pd.Series:
-        """Return the first column whose values are all 0 or 1."""
+        """Return the first column whose values are all 0/1 or 'h'/'t', converted to int."""
         for col in df.columns:
+            vals = df[col].dropna().astype(str).str.strip().str.lower()
+            # "h"/"t" string format (e.g. the user's test file)
+            if set(vals.unique()).issubset({"h", "t"}):
+                return vals.map({"h": 1, "t": 0}).astype(int).reset_index(drop=True)
+            # numeric 0/1 format
             s = pd.to_numeric(df[col], errors="coerce").dropna()
             if len(s) > 0 and set(s.unique()).issubset({0, 1, 0.0, 1.0}):
                 return s.astype(int).reset_index(drop=True)
         warnings.warn(
-            "No binary (0/1) column found in Excel file; "
+            "No binary (0/1 or h/t) column found in Excel file; "
             "using first column and coercing to int."
         )
         return pd.to_numeric(df.iloc[:, 0], errors="coerce").fillna(0).astype(int)
